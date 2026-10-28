@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KARMAN | Product Catalogue</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; font-family:"Segoe UI",Arial,"Microsoft YaHei",sans-serif; color:#fff; overflow:hidden; }
+  .stage { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; }
+  .stage img { max-width:100%; max-height:100%; object-fit:contain; cursor:pointer; user-select:none; -webkit-user-drag:none; }
+  .hint { position:fixed; bottom:22px; left:0; right:0; text-align:center; color:rgba(255,255,255,.55); font-size:13px; letter-spacing:2px; pointer-events:none; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.9} }
+  /* 目录页热点 */
+  .hot { position:absolute; cursor:pointer; border-radius:8px; transition:box-shadow .2s, background .2s; }
+  .hot:hover { background:rgba(255,255,255,.10); box-shadow:0 0 0 2px rgba(255,120,20,.8); }
+  /* 翻页控制 */
+  .nav { position:fixed; top:50%; transform:translateY(-50%); z-index:10; width:52px; height:52px; border:none; border-radius:50%;
+         background:rgba(255,255,255,.12); color:#fff; font-size:24px; cursor:pointer; display:none; backdrop-filter:blur(4px); }
+  .nav:hover { background:rgba(255,120,20,.85); }
+  #prev { left:14px; } #next { right:14px; }
+  #back { position:fixed; top:16px; left:16px; z-index:10; display:none; padding:8px 18px; border:1px solid rgba(255,255,255,.35);
+          background:rgba(0,0,0,.5); color:#fff; border-radius:20px; cursor:pointer; font-size:13px; letter-spacing:1px; }
+  #back:hover { background:rgba(255,120,20,.85); border-color:transparent; }
+  #pageno { position:fixed; top:20px; right:20px; z-index:10; display:none; background:rgba(0,0,0,.5); padding:6px 14px;
+            border-radius:14px; font-size:13px; color:rgba(255,255,255,.8); }
+  /* 右下角一键返回封面 */
+  #home { position:fixed; right:24px; bottom:24px; z-index:20; display:none; align-items:center; gap:8px;
+          padding:11px 20px 11px 16px; border:1px solid rgba(255,120,20,.75); border-radius:26px;
+          background:rgba(0,0,0,.62); color:#fff; font-size:13px; letter-spacing:1px; cursor:pointer;
+          backdrop-filter:blur(6px); box-shadow:0 4px 18px rgba(0,0,0,.45);
+          transition:background .2s, transform .2s, box-shadow .2s; }
+  #home:hover { background:rgba(255,120,20,.9); border-color:transparent; transform:translateY(-2px);
+                box-shadow:0 8px 24px rgba(255,120,20,.35); }
+  #home svg { width:15px; height:15px; flex:0 0 auto; }
+  @media (max-width:600px){
+    #home { right:12px; bottom:12px; padding:9px 14px; font-size:12px; }
+  }
+  .fade { animation:fade .35s ease; }
+  @keyframes fade { from{opacity:0} to{opacity:1} }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage"><img id="view" src="pages/cover.jpg" alt="catalogue"></div>
+  <div class="hint" id="hint">点击进入 CONTENTS</div>
+  <button class="nav" id="prev">‹</button>
+  <button class="nav" id="next">›</button>
+  <button id="back">← 返回目录</button>
+  <button id="home" title="一键返回封面">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>
+    </svg>
+    <span>返回封面</span>
+  </button>
+  <div id="pageno"></div>
+
+<script>
+const IMG = "pages/";
+const SECTIONS = { atv:3, dirtbike:106, gokart:127, farmatv:152, electric:159 };
+const TOTAL = 209;
+const view = document.getElementById('view');
+const hint = document.getElementById('hint');
+const stage = document.getElementById('stage');
+const prev = document.getElementById('prev'), next = document.getElementById('next');
+const back = document.getElementById('back'), pageno = document.getElementById('pageno');
+const home = document.getElementById('home');
+
+let mode = 'cover';            // cover | catalog | page
+let cur = 1;                   // 当前 PDF 页码（1-based）
+
+function pad(n){ return String(n).padStart(3,'0'); }
+function imgFor(n){ return n===1 ? IMG+'cover.jpg' : n===2 ? IMG+'intro.jpg' : IMG+'pg-'+pad(n)+'.jpg'; }
+
+function show(src, hintText){
+  view.classList.remove('fade'); void view.offsetWidth; view.classList.add('fade');
+  view.src = src;
+  hint.textContent = hintText || '';
+}
+
+function clearHotspots(){ document.querySelectorAll('.hot').forEach(e=>e.remove()); }
+function toCover(){ mode='cover'; cur=1; clearHotspots(); show(IMG+'cover.jpg','点击进入公司简介'); syncUI(); }
+function toIntro(){ mode='intro'; cur=2; clearHotspots(); show(IMG+'intro.jpg','点击进入目录 CONTENTS'); syncUI(); }
+function toCatalog(){ mode='catalog'; buildHotspots(); show(IMG+'catalog.png','点击分类进入对应页面'); syncUI(); }
+function toPage(n, backToCatalog){
+  mode='page'; cur=Math.min(Math.max(n,1),TOTAL); clearHotspots();
+  show(imgFor(cur), '第 '+cur+' / '+TOTAL+' 页');
+  syncUI();
+}
+
+function syncUI(){
+  const browsing = (mode==='page');
+  prev.style.display = next.style.display = browsing ? 'block' : 'none';
+  back.style.display = pageno.style.display = browsing ? 'block' : 'none';
+  // 返回封面按钮：除封面外的所有页面都显示
+  home.style.display = (mode==='cover') ? 'none' : 'flex';
+}
+
+/* ---- 目录页热点坐标（相对图片百分比，覆盖五个标题区域） ---- */
+const HOTSPOTS = [
+  { key:'atv',      y:[8, 18],  x:[23, 43] },
+  { key:'dirtbike', y:[25, 40], x:[19, 49] },
+  { key:'gokart',   y:[42, 54], x:[23, 60] },
+  { key:'farmatv',  y:[59, 70], x:[23, 56] },
+  { key:'electric', y:[76, 88], x:[23, 50] },
+];
+function buildHotspots(){
+  document.querySelectorAll('.hot').forEach(e=>e.remove());
+  HOTSPOTS.forEach(h=>{
+    const d = document.createElement('div');
+    d.className='hot';
+    d.style.position='absolute';
+    d.style.zIndex='5';
+    const ir = imgRect();   // 相对图片实际显示区域定位
+    d.style.left   = (ir.left + h.x[0]/100*ir.width) + 'px';
+    d.style.width  = ((h.x[1]-h.x[0])/100*ir.width) + 'px';
+    d.style.top    = (ir.top + h.y[0]/100*ir.height) + 'px';
+    d.style.height = ((h.y[1]-h.y[0])/100*ir.height) + 'px';
+    d.title = '跳转 ' + h.key.toUpperCase();
+    d.addEventListener('click', ev=>{ ev.stopPropagation(); toPage(SECTIONS[h.key]); });
+    document.body.appendChild(d);
+  });
+}
+function imgRect(){
+  // 计算图片在视口中实际显示的矩形（object-fit:contain）
+  const vw = innerWidth, vh = innerHeight;
+  const iw = 1920, ih = 720; // 目录图片像素尺寸
+  const s = Math.min(vw/iw, vh/ih);
+  const w = iw*s, h = ih*s;
+  return { top:(vh-h)/2, left:(vw-w)/2, width:w, height:h };
+}
+addEventListener('resize', ()=>{ if(mode==='catalog') buildHotspots(); });
+
+/* ---- 交互 ---- */
+view.addEventListener('click', ()=>{
+  if(mode==='cover') toIntro();
+  else if(mode==='intro') toCatalog();
+});
+prev.addEventListener('click', e=>{ e.stopPropagation(); if(mode==='page') toPage(cur-1); });
+next.addEventListener('click', e=>{ e.stopPropagation(); if(mode==='page') toPage(cur+1); });
+back.addEventListener('click', e=>{ e.stopPropagation(); toCatalog(); });
+home.addEventListener('click', e=>{ e.stopPropagation(); toCover(); });
+addEventListener('keydown', e=>{
+  if(mode!=='page') return;
+  if(e.key==='ArrowLeft') toPage(cur-1);
+  if(e.key==='ArrowRight') toPage(cur+1);
+  if(e.key==='Escape') toCatalog();
+});
+// 目录页点击空白处也可返回封面
+document.body.addEventListener('click', ()=>{ if(mode==='page' && event.target===stage) {} });
+</script>
+</body>
+</html>
